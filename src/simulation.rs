@@ -2,18 +2,18 @@ use crate::particle::Particle;
 use crate::forces::compute_gravity;
 use crate::integrator::euler_step;
 
-pub fn run_simulation(particles: &mut Vec<Particle>, dt: f64, steps: usize) {
-    for _ in 0..steps {
-        for i in 0..particles.len() {
-            let mut total_force = [0.0, 0.0];
-            for j in 0..particles.len() {
-                if i != j {
-                    let force = compute_gravity(&particles[i], &particles[j]);
-                    total_force[0] += force[0];
-                    total_force[1] += force[1];
-                }
-            }
-            euler_step(&mut particles[i], total_force, dt);
+pub fn simulation_step(particles: &mut Vec<Particle>, total_forces: &mut Vec<[f64; 2]>, dt: f64) {
+    for i in 0..particles.len() {
+        for j in i+1..particles.len() {
+            let force = compute_gravity(&particles[i], &particles[j]);
+            total_forces[i][0] += force[0];
+            total_forces[i][1] += force[1];
+            total_forces[j][0] -= force[0];
+            total_forces[j][1] -= force[1];
         }
+    }
+    for (force, particle) in total_forces.iter_mut().zip(particles.iter_mut()) {
+        euler_step(particle, *force, dt);
+        *force = [0.0, 0.0];
     }
 }
