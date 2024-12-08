@@ -1,72 +1,48 @@
-use crate::Simulation;
-use ggez::event::EventHandler;
-use ggez::graphics::{self, Color, DrawMode, Font, Mesh, Text};
+use crate::simstate::SimState;
+use ggez::graphics::{self, Color, DrawMode, Font, Text};
 use ggez::{Context, GameResult};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 pub struct SimulationVisualizer {
-    simulation: Simulation,
-    pub simulation_time: f64,
-    pub steps_taken: usize,
+    shared_state: Arc<RwLock<SimState>>,
     last_update_time: Instant,
     frame_count: usize,
-    pub fps: f64,
+    fps: f64,
     fps_window: Duration,
-    sim_step_duration: Duration,
-    steps_per_frame: u32,
-    target_frame_duration: Duration,
+    my_state: SimState,
 }
 
 impl SimulationVisualizer {
-    pub fn new(simulation: Simulation) -> Self {
+    pub fn new(shared_state: Arc<RwLock<SimState>>) -> Self {
+        let my_state;
+        {
+            let shared_state = shared_state.read().unwrap();
+            my_state = shared_state.clone()
+        }
         SimulationVisualizer {
-            simulation,
-            simulation_time: 0.0,
-            steps_taken: 0,
+            shared_state,
             last_update_time: Instant::now(),
             frame_count: 0,
             fps: 0.0,
             fps_window: Duration::from_secs_f64(0.5),
-            sim_step_duration: Duration::from_secs_f64(0.0),
-            steps_per_frame: 0,
-            target_frame_duration: Duration::from_secs_f64(1.0 / 60.0), // 60 FPS
+            my_state,
         }
     }
 }
 
-impl EventHandler for SimulationVisualizer {
+impl ggez::event::EventHandler for SimulationVisualizer {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
-        let frame_start = Instant::now();
-        let mut steps_this_frame = 0;
-
-        // Simulation loop
-        let mut remaining_time = self.target_frame_duration;
-        loop {
-            let step_start = Instant::now();
-            self.simulation.simulation_step();
-            self.simulation_time += self.simulation.dt;
-            self.steps_taken += 1;
-            steps_this_frame += 1;
-            let step_duration = step_start.elapsed();
-
-            remaining_time = remaining_time.saturating_sub(step_duration);
-            if remaining_time < self.sim_step_duration
-                || (steps_this_frame > 1 && remaining_time.is_zero())
-            {
-                break;
-            }
+        if let Ok(state) = self.shared_state.read() {
+            self.my_state = state.clone()
         }
-
-        self.sim_step_duration = frame_start.elapsed() / steps_this_frame;
-        self.steps_per_frame = steps_this_frame;
 
         // FPS calculation
         self.frame_count += 1;
-        let now = Instant::now();
-        if now.duration_since(self.last_update_time) >= self.fps_window {
+        if self.last_update_time.elapsed() >= self.fps_window {
             self.fps = self.frame_count as f64 / self.fps_window.as_secs_f64();
             self.frame_count = 0;
-            self.last_update_time = now;
+            self.last_update_time = Instant::now();
         }
 
         Ok(())
@@ -75,22 +51,22 @@ impl EventHandler for SimulationVisualizer {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, Color::BLACK);
 
-        // Draw particles
-        let positions = self.simulation.get_particle_positions();
-        for position in &positions {
-            let circle =
-                Mesh::new_circle(ctx, DrawMode::fill(), *position, 2.0, 0.1, Color::WHITE)?;
-            graphics::draw(ctx, &circle, graphics::DrawParam::default())?;
+        // Draw particles as a batch of circles
+        let mut mesh_builder = graphics::MeshBuilder::new();
+        for position in &self.my_state.positions {
+            let _ = mesh_builder.circle(DrawMode::fill(), *position, 2.0, 0.1, Color::WHITE);
         }
+        let mesh = mesh_builder.build(ctx)?;
+        graphics::draw(ctx, &mesh, graphics::DrawParam::default())?;
 
-        // Draw simulation stats
+        // Display simulation stats
         let display_text = format!(
-            "Sim Time: {:.2} s\nSteps: {}\nFPS: {:.1}\nStep Time: {:.2} ms\nSteps per frame: {}",
-            self.simulation_time,
-            self.steps_taken,
-            self.fps,
-            self.sim_step_duration.as_secs_f64() * 1000.0,
-            self.steps_per_frame
+            "Real Time: {:.1} s\nSim Time: {:.1} s\nSim Speed: {:.2}\nSteps: {}\nFPS: {:.1}",
+            self.my_state.start_time.elapsed().as_secs_f64(),
+            self.my_state.sim_time,
+            self.my_state.sim_speed,
+            self.my_state.steps_taken,
+            self.fps
         );
         let text = Text::new((display_text, Font::default(), 20.0));
         graphics::draw(ctx, &text, ([10.0, 10.0],))?;

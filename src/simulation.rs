@@ -27,7 +27,7 @@ impl Simulation {
             total_forces,
             dt,
             simulation_type,
-            theta: theta,
+            theta,
         }
     }
 
