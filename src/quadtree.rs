@@ -121,6 +121,7 @@ impl QuadTree {
 
         // If the node is far enough, use approximation
         if dist > 0.0 && (self.boundary[2] - self.boundary[0]) / dist < theta {
+            let dist_sq = dist_sq.max(1.0);
             let force = GRAVIT_CONST * self.total_mass * particle.mass / dist_sq;
             return [force * dx / dist, force * dy / dist];
         }
