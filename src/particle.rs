@@ -7,6 +7,10 @@ pub struct Particle {
 
 impl Particle {
     pub fn new(position: [f64; 2], velocity: [f64; 2], mass: f64) -> Self {
-        Particle { position, velocity, mass }
+        Particle {
+            position,
+            velocity,
+            mass,
+        }
     }
 }
