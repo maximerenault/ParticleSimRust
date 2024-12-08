@@ -2,14 +2,9 @@ use crate::simstate::SimState;
 use ggez::graphics::{self, Color, DrawMode, Font, Text};
 use ggez::{Context, GameResult};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
 
 pub struct SimulationVisualizer {
     shared_state: Arc<RwLock<SimState>>,
-    last_update_time: Instant,
-    frame_count: usize,
-    fps: f64,
-    fps_window: Duration,
     my_state: SimState,
 }
 
@@ -22,10 +17,6 @@ impl SimulationVisualizer {
         }
         SimulationVisualizer {
             shared_state,
-            last_update_time: Instant::now(),
-            frame_count: 0,
-            fps: 0.0,
-            fps_window: Duration::from_secs_f64(0.5),
             my_state,
         }
     }
@@ -35,14 +26,6 @@ impl ggez::event::EventHandler for SimulationVisualizer {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         if let Ok(state) = self.shared_state.read() {
             self.my_state = state.clone()
-        }
-
-        // FPS calculation
-        self.frame_count += 1;
-        if self.last_update_time.elapsed() >= self.fps_window {
-            self.fps = self.frame_count as f64 / self.fps_window.as_secs_f64();
-            self.frame_count = 0;
-            self.last_update_time = Instant::now();
         }
 
         Ok(())
@@ -66,7 +49,7 @@ impl ggez::event::EventHandler for SimulationVisualizer {
             self.my_state.sim_time,
             self.my_state.sim_speed,
             self.my_state.steps_taken,
-            self.fps
+            ggez::timer::fps(ctx),
         );
         let text = Text::new((display_text, Font::default(), 20.0));
         graphics::draw(ctx, &text, ([10.0, 10.0],))?;
