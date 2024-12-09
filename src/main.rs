@@ -8,8 +8,9 @@ mod simulationloop;
 mod utils;
 mod visualization;
 
+use crate::integrator::{EULER, LEAPFROG, MIDPOINT, RK4};
 use crate::simstate::SimState;
-use crate::simulation::{Simulation, BARNES_HUT, DIRECT_SUM};
+use crate::simulation::{Simulation, BARNES_HUT, DIRECT_SUM, DIRECT_SUM_PARALLEL};
 use crate::simulationloop::simulationloop;
 use crate::visualization::SimulationVisualizer;
 use ggez::{event, graphics, ContextBuilder};
@@ -22,11 +23,12 @@ fn main() {
     let dt = 0.001;
     let speed = 0.1;
     let step_duration = Duration::from_secs_f64(dt / speed);
-    let simulation_type = BARNES_HUT;
+    let simulation_type = DIRECT_SUM_PARALLEL;
+    let integrator_type = LEAPFROG;
     let theta = 0.5;
 
     let shared_state = Arc::new(RwLock::new(SimState::new(n)));
-    let simulation = Simulation::new(particles, dt, simulation_type, Some(theta));
+    let simulation = Simulation::new(particles, dt, simulation_type, integrator_type, Some(theta));
     let visualizer = SimulationVisualizer::new(shared_state.clone());
 
     let (ctx, event_loop) = ContextBuilder::new("GravitSim", "Maxime Renault")
