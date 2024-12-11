@@ -7,6 +7,7 @@ use rayon::prelude::*;
 pub const DIRECT_SUM: i32 = 0;
 pub const DIRECT_SUM_PARALLEL: i32 = 1;
 pub const BARNES_HUT: i32 = 2;
+pub const BARNES_HUT_PARALLEL: i32 = 3;
 
 pub struct Simulation {
     pub particles: Vec<Particle>,
@@ -43,6 +44,10 @@ impl Simulation {
             self.direct_sum_parallel_step()
         } else if self.simulation_type == BARNES_HUT {
             self.barnes_hut_step(self.theta.expect("Barnes-Hut expects a parameter theta!"))
+        } else if self.simulation_type == BARNES_HUT_PARALLEL {
+            self.barnes_hut_parallel_step(
+                self.theta.expect("Barnes-Hut expects a parameter theta!"),
+            )
         }
     }
 
@@ -111,7 +116,7 @@ impl Simulation {
     }
 
     fn barnes_hut_step(&mut self, theta: f64) {
-        let mut root = QuadTree::new([0.0, 0.0, 800.0, 600.0]);
+        let mut root = QuadTree::new([0.0, 0.0, 1500.0, 900.0]);
         for particle in self.particles.iter() {
             root.insert(*particle);
         }
@@ -122,6 +127,32 @@ impl Simulation {
             let force = root.compute_force(particle, theta);
             time_integration(particle, &force, self.dt, self.integrator_type);
         }
+    }
+
+    fn barnes_hut_parallel_step(&mut self, theta: f64) {
+        let mut root = QuadTree::new([0.0, 0.0, 1500.0, 900.0]);
+        let mut thread_trees: Vec<QuadTree> = self
+            .particles
+            .par_chunks(100) // Each thread processes a chunk of 100 particles
+            .map(|chunk| {
+                let mut local_tree = QuadTree::new([0.0, 0.0, 1500.0, 900.0]);
+                for particle in chunk {
+                    local_tree.insert(*particle);
+                }
+                local_tree
+            })
+            .collect();
+
+        for tree in thread_trees.iter_mut() {
+            root.merge(tree);
+        }
+
+        root.finalize();
+
+        self.particles.par_iter_mut().for_each(|particle| {
+            let force = root.compute_force(particle, theta);
+            time_integration(particle, &force, self.dt, self.integrator_type);
+        });
     }
 
     pub fn get_particle_positions(&self) -> Vec<[f32; 2]> {

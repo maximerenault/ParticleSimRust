@@ -1,6 +1,7 @@
 use crate::particle::Particle;
+use std::f64::consts::PI;
 
-pub const GRAVIT_CONST: f64 = 6.67430;
+pub const GRAVIT_CONST: f64 = 4.0 * PI * PI;
 
 pub fn compute_gravity(p1: &Particle, p2: &Particle) -> [f64; 2] {
     let dx = p2.position[0] - p1.position[0];

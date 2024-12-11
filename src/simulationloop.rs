@@ -38,7 +38,7 @@ pub fn simulationloop(
             sim.simulation_step();
             step_count += 1;
 
-            // Compute sim speed
+            // Compute actual sim speed
             if speed_update_time.elapsed() >= speed_update_window {
                 sim_speed = (step_count as f64 * sim.dt) / speed_update_window.as_secs_f64();
                 step_count = 0;

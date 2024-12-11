@@ -37,7 +37,7 @@ impl ggez::event::EventHandler for SimulationVisualizer {
         // Draw particles as a batch of circles
         let mut mesh_builder = graphics::MeshBuilder::new();
         for position in &self.my_state.positions {
-            let _ = mesh_builder.circle(DrawMode::fill(), *position, 2.0, 0.1, Color::WHITE);
+            let _ = mesh_builder.circle(DrawMode::fill(), *position, 1.0, 0.1, Color::WHITE);
         }
         let mesh = mesh_builder.build(ctx)?;
         graphics::draw(ctx, &mesh, graphics::DrawParam::default())?;

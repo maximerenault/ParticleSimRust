@@ -3,21 +3,19 @@ use crate::particle::Particle;
 
 #[derive(Debug)]
 pub struct QuadTree {
-    boundary: [f64; 4], // [x_min, y_min, x_max, y_max]
-    total_mass: f64,
-    center_of_mass: [f64; 2],
-    finalized: bool,
-    particle: Option<Particle>,
-    children: Option<Box<[QuadTree; 4]>>, // 4 children for 2D quadtree
+    pub boundary: [f64; 4], // [x_min, y_min, x_max, y_max]
+    pub mass: f64,
+    pub center_of_mass: [f64; 2],
+    pub particle: Option<Particle>,
+    pub children: Option<Box<[QuadTree; 4]>>, // 4 children for 2D quadtree
 }
 
 impl QuadTree {
     pub fn new(boundary: [f64; 4]) -> Self {
         QuadTree {
             boundary,
-            total_mass: 0.0,
+            mass: 0.0,
             center_of_mass: [0.0, 0.0],
-            finalized: false,
             particle: None,
             children: None,
         }
@@ -31,33 +29,25 @@ impl QuadTree {
             return false;
         }
 
+        self.add_mass(particle);
+
         // If the node is empty, insert the particle
         if self.particle.is_none() && self.children.is_none() {
             self.particle = Some(particle);
-            self.add_mass(particle);
             return true;
         }
 
         // If the node is already subdivided, pass the particle to the children
-        if let Some(children) = &mut self.children {
-            for child in children.iter_mut() {
-                if child.insert(particle) {
-                    self.add_mass(particle);
-                    return true;
-                }
-            }
+        if !self.children.is_none() {
+            return self.insert_child(particle);
         }
 
         // If the node contains a particle, subdivide and redistribute
         if self.particle.is_some() {
             self.subdivide();
             let existing_particle = self.particle.take().unwrap();
-            for child in self.children.as_mut().unwrap().iter_mut() {
-                if child.insert(existing_particle) {
-                    break;
-                }
-            }
-            return self.insert(particle); // Try to insert the new particle again
+            self.insert_child(existing_particle);
+            return self.insert_child(particle);
         }
 
         false
@@ -84,16 +74,36 @@ impl QuadTree {
         ]));
     }
 
+    fn insert_child(&mut self, particle: Particle) -> bool {
+        let [x_min, y_min, x_max, y_max] = self.boundary;
+        let mid_x = (x_min + x_max) / 2.0;
+        let mid_y = (y_min + y_max) / 2.0;
+
+        if particle.position[0] >= mid_x {
+            if particle.position[1] >= mid_y {
+                return self.children.as_mut().unwrap()[3].insert(particle);
+            } else {
+                return self.children.as_mut().unwrap()[1].insert(particle);
+            }
+        } else {
+            if particle.position[1] >= mid_y {
+                return self.children.as_mut().unwrap()[2].insert(particle);
+            } else {
+                return self.children.as_mut().unwrap()[0].insert(particle);
+            }
+        }
+    }
+
     fn add_mass(&mut self, particle: Particle) {
         self.center_of_mass[0] += particle.mass * particle.position[0];
         self.center_of_mass[1] += particle.mass * particle.position[1];
-        self.total_mass += particle.mass;
+        self.mass += particle.mass;
     }
 
     pub fn finalize(&mut self) {
-        if self.total_mass != 0.0 {
-            self.center_of_mass[0] /= self.total_mass;
-            self.center_of_mass[1] /= self.total_mass;
+        if self.mass != 0.0 {
+            self.center_of_mass[0] /= self.mass;
+            self.center_of_mass[1] /= self.mass;
         }
 
         if !self.children.is_none() {
@@ -101,16 +111,10 @@ impl QuadTree {
                 child.finalize();
             }
         }
-
-        self.finalized = true;
     }
 
     pub fn compute_force(&self, particle: &Particle, theta: f64) -> [f64; 2] {
-        if !self.finalized {
-            panic!("QuadTree was not finalized!");
-        }
-
-        if self.total_mass == 0.0 {
+        if self.mass == 0.0 {
             return [0.0, 0.0];
         }
 
@@ -122,7 +126,7 @@ impl QuadTree {
         // If the node is far enough, use approximation
         if dist > 0.0 && (self.boundary[2] - self.boundary[0]) / dist < theta {
             let dist_sq = dist_sq.max(1.0);
-            let force = GRAVIT_CONST * self.total_mass * particle.mass / dist_sq;
+            let force = GRAVIT_CONST * self.mass * particle.mass / dist_sq;
             return [force * dx / dist, force * dy / dist];
         }
 
@@ -138,5 +142,38 @@ impl QuadTree {
         }
 
         [0.0, 0.0]
+    }
+
+    pub fn merge(&mut self, other: &mut QuadTree) {
+        assert_eq!(
+            self.boundary, other.boundary,
+            "Regions must match for merging"
+        );
+
+        if let Some(particle) = other.particle {
+            self.insert(particle);
+            return;
+        }
+
+        if other.mass > 0.0 {
+            self.mass += other.mass;
+            self.center_of_mass = [
+                (self.center_of_mass[0] + other.center_of_mass[0]),
+                (self.center_of_mass[1] + other.center_of_mass[1]),
+            ];
+        }
+
+        if let Some(mut self_children) = self.children.take() {
+            if let Some(other_children) = other.children.take().as_mut() {
+                for (self_child, other_child) in
+                    self_children.iter_mut().zip(other_children.iter_mut())
+                {
+                    self_child.merge(other_child);
+                }
+                self.children = Some(self_children);
+            }
+        } else if let Some(other_children) = other.children.take() {
+            self.children = Some(other_children);
+        }
     }
 }
